@@ -178,7 +178,6 @@ public class Sender {
         int nextIdx = 0;  // next packet index to send
         int timeoutCount = 0;
 
-        Queue<DSPacket> pendingSend = new LinkedList<>();
 
         System.out.println("[Sender][GBN] Total packets to send: " + totalPackets);
 
@@ -187,29 +186,17 @@ public class Sender {
             while (nextIdx < base + N && nextIdx < totalPackets) {
                 // Collect next group of 4 (or fewer at end)
                 int groupEnd = Math.min(nextIdx + 4, totalPackets);
-                // Only permute if we haven't already queued these
-                if (pendingSend.isEmpty() || needsMorePackets(nextIdx, base, N, totalPackets)) {
-                    List<DSPacket> group = new ArrayList<>();
-                    for (int i = nextIdx; i < groupEnd; i++) {
-                        group.add(allPackets.get(i));
-                    }
-
-                    List<DSPacket> permuted = ChaosEngine.permutePackets(group);
-                    for (DSPacket p : permuted) {
-                        pendingSend.add(p);
-                    }
-                    nextIdx = groupEnd;
-                } 
-                else {
-                    break;
+                
+                List<DSPacket> group = new ArrayList<>();
+                for (int i = nextIdx; i < groupEnd; i++) {
+                    group.add(allPackets.get(i));
                 }
-            }
-
-            // --- Send all queued packets ---
-            while (!pendingSend.isEmpty()) {
-                DSPacket pkt = pendingSend.poll();
-                sendPacket(socket, pkt, rcvAddr, rcvDataPort);
-                System.out.println("[Sender][GBN] Sent DATA Seq=" + pkt.getSeqNum());
+                List<DSPacket> toSend = ChaosEngine.permutePackets(group);
+                for (DSPacket pkt : toSend) {
+                    sendPacket(socket, pkt, rcvAddr, rcvDataPort);
+                    System.out.println("[Sender][GBN] Sent DATA Seq=" + pkt.getSeqNum());
+                }
+                nextIdx = groupEnd;
             }
 
             // --- Wait for ACKs ---
@@ -217,14 +204,11 @@ public class Sender {
                 DSPacket ack = receivePacket(socket);
                 if (ack.getType() == DSPacket.TYPE_ACK) {
                     int ackedSeq = ack.getSeqNum();
-                    // Find how far the base can advance
                     int newBase = findNewBase(allPackets, base, ackedSeq);
                     if (newBase > base) {
                         System.out.println("[Sender][GBN] ACK " + ackedSeq + " → advancing base from " + base + " to " + newBase);
                         base = newBase;
                         timeoutCount = 0; // reset on progress
-                        pendingSend.clear();
-                        nextIdx = base; // refill window from new base
                     } 
                     else {
                         System.out.println("[Sender][GBN] Duplicate/old ACK " + ackedSeq + ", ignoring");
@@ -241,7 +225,6 @@ public class Sender {
                 }
                 // Retransmit entire window from base
                 System.out.println("[Sender][GBN] Retransmitting window from base=" + base);
-                pendingSend.clear();
                 nextIdx = base; // reset nextIdx so window refills from base
             }
         }
@@ -312,11 +295,6 @@ public class Sender {
             // Handle wrap-around: if we pass the acked seq going forward, stop
         }
         return newBase;
-    }
-
-    /** Determine if more packets need to be queued for the window */
-    private static boolean needsMorePackets(int nextIdx, int base, int N, int total) {
-        return nextIdx < base + N && nextIdx < total;
     }
 
     /** Read entire file into a byte array */

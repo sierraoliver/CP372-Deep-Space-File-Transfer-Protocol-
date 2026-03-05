@@ -64,7 +64,7 @@ public class Receiver {
         while (!done) {
             DSPacket pkt = receivePacket(socket);
             byte type = pkt.getType();
-            int  seq  = pkt.getSeqNum();
+            int seq = pkt.getSeqNum();
 
             if (type == DSPacket.TYPE_DATA) {
 
@@ -72,14 +72,14 @@ public class Receiver {
 
                 if (seq == expectedSeq) {
                     fos.write(pkt.getPayload());
-                    lastACKed   = seq;
+                    lastACKed = seq;
                     expectedSeq = (expectedSeq + 1) % 128;
 
                     while (buffer.containsKey(expectedSeq)) {
                         DSPacket buffered = buffer.remove(expectedSeq);
                         fos.write(buffered.getPayload());
                         System.out.println("[Receiver] Delivered buffered Seq=" + expectedSeq);
-                        lastACKed   = expectedSeq;
+                        lastACKed = expectedSeq;
                         expectedSeq = (expectedSeq + 1) % 128;
                     }
 
@@ -139,7 +139,7 @@ public class Receiver {
 
         if (ChaosEngine.shouldDrop(ackCount, rn)) {
             System.out.println("[Receiver] *** ACK " + seq + " DROPPED (ChaosEngine, count=" + ackCount + ") ***");
-            return; // simulate loss — do not send
+            return; 
         }
 
         byte[] data = ack.toBytes();

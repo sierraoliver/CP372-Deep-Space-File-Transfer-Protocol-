@@ -12,20 +12,8 @@ import java.util.*;
  *   RN = 0  → no ACKs dropped
  *   RN = X  → every Xth ACK is dropped (via ChaosEngine)
  *
- * The receiver auto-detects Stop-and-Wait vs GBN based on whether
- * the sender uses a window size (detected from first DATA packet behaviour).
- * Since the spec says Receiver mirrors the sender's window, we handle
- * both modes generically — the buffering logic degrades naturally to S&W
- * when the window is effectively 1.
- *
- * NOTE: The receiver does not receive a window size argument.
- * It operates in a unified buffered mode that handles both protocols.
  */
 public class Receiver {
-
-    // -------------------------------------------------------------------------
-    // Entry Point
-    // -------------------------------------------------------------------------
 
     public static void main(String[] args) throws Exception {
 
@@ -34,11 +22,11 @@ public class Receiver {
             System.exit(1);
         }
 
-        String senderIp      = args[0];
-        int    senderAckPort = Integer.parseInt(args[1]);
-        int    rcvDataPort   = Integer.parseInt(args[2]);
-        String outputFile    = args[3];
-        int    rn            = Integer.parseInt(args[4]);
+        String senderIp = args[0];
+        int senderAckPort = Integer.parseInt(args[1]);
+        int rcvDataPort = Integer.parseInt(args[2]);
+        String outputFile = args[3];
+        int rn = Integer.parseInt(args[4]);
 
         InetAddress senderAddr = InetAddress.getByName(senderIp);
 
@@ -51,7 +39,6 @@ public class Receiver {
         // ACK counter for ChaosEngine (1-indexed, counts ALL intended ACKs)
         int ackCount = 0;
 
-        // ---- Handshake: wait for SOT ----
         System.out.println("[Receiver] Waiting for SOT...");
         while (true) {
             DSPacket pkt = receivePacket(socket);
@@ -63,10 +50,9 @@ public class Receiver {
             }
         }
 
-        // ---- Data Transfer ----
         // expectedSeq starts at 1 (first DATA packet)
         int expectedSeq = 1;
-        int lastACKed   = 0;  // tracks the last cumulative ACK sent (starts at SOT seq)
+        int lastACKed = 0;  // tracks the last cumulative ACK sent (starts at SOT seq)
 
         // Buffer for out-of-order packets (GBN): seq → DSPacket
         Map<Integer, DSPacket> buffer = new LinkedHashMap<>();
@@ -85,12 +71,10 @@ public class Receiver {
                 System.out.println("[Receiver] Received DATA Seq=" + seq + " (expected=" + expectedSeq + ")");
 
                 if (seq == expectedSeq) {
-                    // In-order packet — write and check buffer for consecutive deliverable packets
                     fos.write(pkt.getPayload());
                     lastACKed   = seq;
                     expectedSeq = (expectedSeq + 1) % 128;
 
-                    // Drain buffer: deliver any buffered packets that are now in order
                     while (buffer.containsKey(expectedSeq)) {
                         DSPacket buffered = buffer.remove(expectedSeq);
                         fos.write(buffered.getPayload());
@@ -104,29 +88,32 @@ public class Receiver {
                     System.out.println("[Receiver] Sending cumulative ACK=" + lastACKed);
                     sendACK(socket, senderAddr, senderAckPort, lastACKed, ackCount, rn);
 
-                } else {
-                    // Out-of-order: buffer if not already received (GBN behaviour)
+                } 
+                else {
+                    
                     if (!buffer.containsKey(seq)) {
                         buffer.put(seq, pkt);
                         System.out.println("[Receiver] Buffered out-of-order Seq=" + seq);
-                    } else {
+                    } 
+                    else {
                         System.out.println("[Receiver] Duplicate buffered Seq=" + seq + ", discarding");
                     }
 
-                    // Re-send current cumulative ACK
                     ackCount++;
                     System.out.println("[Receiver] Re-sending cumulative ACK=" + lastACKed);
                     sendACK(socket, senderAddr, senderAckPort, lastACKed, ackCount, rn);
                 }
 
-            } else if (type == DSPacket.TYPE_EOT) {
+            } 
+            else if (type == DSPacket.TYPE_EOT) {
 
                 System.out.println("[Receiver] EOT received (Seq=" + seq + ")");
                 ackCount++;
                 sendACK(socket, senderAddr, senderAckPort, seq, ackCount, rn);
                 done = true;
 
-            } else if (type == DSPacket.TYPE_SOT) {
+            } 
+            else if (type == DSPacket.TYPE_SOT) {
                 // Duplicate SOT (sender retransmitting handshake) — re-ACK
                 System.out.println("[Receiver] Duplicate SOT received, re-sending ACK 0");
                 ackCount++;
@@ -141,19 +128,13 @@ public class Receiver {
         System.out.println("[Receiver] Done. Exiting.");
     }
 
-    // -------------------------------------------------------------------------
-    // Helpers
-    // -------------------------------------------------------------------------
-
     /**
      * Send an ACK, subject to ChaosEngine drop simulation.
      *
-     * @param ackCount  Number of ACKs INTENDED so far (1-indexed, including this one)
-     * @param rn        Reliability Number
+     * ackCount - Number of ACKs INTENDED so far (1-indexed, including this one)
+     * rn - Reliability Number
      */
-    private static void sendACK(DatagramSocket socket, InetAddress addr,
-                                 int port, int seq,
-                                 int ackCount, int rn) throws IOException {
+    private static void sendACK(DatagramSocket socket, InetAddress addr, int port, int seq, int ackCount, int rn) throws IOException {
         DSPacket ack = new DSPacket(DSPacket.TYPE_ACK, seq, null);
 
         if (ChaosEngine.shouldDrop(ackCount, rn)) {

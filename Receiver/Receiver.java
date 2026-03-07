@@ -90,13 +90,19 @@ public class Receiver {
 
                 } 
                 else {
-                    
-                    if (!buffer.containsKey(seq)) {
-                        buffer.put(seq, pkt);
-                        System.out.println("[Receiver] Buffered out-of-order Seq=" + seq);
-                    } 
-                    else {
-                        System.out.println("[Receiver] Duplicate buffered Seq=" + seq + ", discarding");
+                    // Check if seq is "behind" expectedSeq (stale retransmit of already-ACKed data).
+                    // Forward distance >= 64 means seq is in the already-delivered half of the seq space.
+                    int forwardDist = (seq - expectedSeq + 128) % 128;
+                    if (forwardDist >= 64) {
+                        System.out.println("[Receiver] Stale retransmit Seq=" + seq + " (already ACKed), discarding");
+                    } else {
+                        if (!buffer.containsKey(seq)) {
+                            buffer.put(seq, pkt);
+                            System.out.println("[Receiver] Buffered out-of-order Seq=" + seq);
+                        }
+                        else {
+                            System.out.println("[Receiver] Duplicate buffered Seq=" + seq + ", discarding");
+                        }
                     }
 
                     ackCount++;
